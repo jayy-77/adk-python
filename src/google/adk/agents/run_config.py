@@ -251,6 +251,25 @@ class RunConfig(BaseModel):
     - Less than or equal to 0: This allows for unbounded number of llm calls.
   """
 
+  max_tool_iterations: int = 50
+  """
+  A limit on the number of consecutive tool calling iterations in a single agent call.
+
+  This prevents infinite loops when FunctionCallingConfig mode="ANY" is used,
+  where the model could keep calling tools indefinitely without providing a 
+  final response. An iteration is counted each time the agent calls the LLM and 
+  it returns function calls (regardless of how many functions are called).
+
+  Valid Values:
+    - More than 0 and less than sys.maxsize: The bound on the number of tool
+      iterations is enforced, if the value is set in this range.
+    - Less than or equal to 0: This allows for unbounded number of tool iterations.
+
+  Note: This is different from max_llm_calls which limits total LLM calls across
+  the entire invocation. max_tool_iterations limits consecutive tool-calling 
+  cycles within a single agent's execution flow.
+  """
+
   custom_metadata: Optional[dict[str, Any]] = None
   """Custom metadata for the current invocation."""
 
@@ -281,6 +300,21 @@ class RunConfig(BaseModel):
           ' run. This may not be ideal, as this could result in a never'
           ' ending communication between the model and the agent in certain'
           ' cases.',
+      )
+
+    return value
+
+  @field_validator('max_tool_iterations', mode='after')
+  @classmethod
+  def validate_max_tool_iterations(cls, value: int) -> int:
+    if value == sys.maxsize:
+      raise ValueError(f'max_tool_iterations should be less than {sys.maxsize}.')
+    elif value <= 0:
+      logger.warning(
+          'max_tool_iterations is less than or equal to 0. This will result in'
+          ' no enforcement on total number of tool iterations that will be made'
+          ' for an agent call. This may not be ideal, as this could result in'
+          ' infinite loops when using FunctionCallingConfig mode="ANY".',
       )
 
     return value

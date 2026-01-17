@@ -46,6 +46,10 @@ class LlmCallsLimitExceededError(Exception):
   """Error thrown when the number of LLM calls exceed the limit."""
 
 
+class ToolIterationsLimitExceededError(Exception):
+  """Error thrown when the number of tool iterations exceed the limit."""
+
+
 class RealtimeCacheEntry(BaseModel):
   """Store audio data chunks for caching before flushing."""
 
@@ -76,6 +80,9 @@ class _InvocationCostManager(BaseModel):
   _number_of_llm_calls: int = 0
   """A counter that keeps track of number of llm calls made."""
 
+  _number_of_tool_iterations: int = 0
+  """A counter that keeps track of consecutive tool calling iterations in current agent call."""
+
   def increment_and_enforce_llm_calls_limit(
       self, run_config: Optional[RunConfig]
   ):
@@ -93,6 +100,29 @@ class _InvocationCostManager(BaseModel):
           "Max number of llm calls limit of"
           f" `{run_config.max_llm_calls}` exceeded"
       )
+
+  def increment_and_enforce_tool_iterations_limit(
+      self, run_config: Optional[RunConfig]
+  ):
+    """Increments _number_of_tool_iterations and enforces the limit."""
+    # We first increment the counter and then check the conditions.
+    self._number_of_tool_iterations += 1
+
+    if (
+        run_config
+        and run_config.max_tool_iterations > 0
+        and self._number_of_tool_iterations > run_config.max_tool_iterations
+    ):
+      # We only enforce the limit if the limit is a positive number.
+      raise ToolIterationsLimitExceededError(
+          "Max number of tool iterations limit of"
+          f" `{run_config.max_tool_iterations}` exceeded. This prevents"
+          " infinite loops when using FunctionCallingConfig mode='ANY'."
+      )
+
+  def reset_tool_iterations_counter(self):
+    """Resets the tool iterations counter. Called when agent provides final response."""
+    self._number_of_tool_iterations = 0
 
 
 class InvocationContext(BaseModel):
@@ -315,6 +345,33 @@ class InvocationContext(BaseModel):
     self._invocation_cost_manager.increment_and_enforce_llm_calls_limit(
         self.run_config
     )
+
+  def increment_tool_iteration_count(
+      self,
+  ):
+    """Tracks number of tool calling iterations in the current agent call.
+
+    This method should be called each time the agent makes an LLM call that
+    returns function calls, to prevent infinite loops in FunctionCallingConfig
+    mode="ANY" scenarios.
+
+    Raises:
+      ToolIterationsLimitExceededError: If number of tool iterations exceed
+        the set threshold.
+    """
+    self._invocation_cost_manager.increment_and_enforce_tool_iterations_limit(
+        self.run_config
+    )
+
+  def reset_tool_iteration_count(
+      self,
+  ):
+    """Resets the tool iterations counter.
+
+    This should be called when the agent provides a final response (not tool calls),
+    as it indicates the tool calling loop has completed successfully.
+    """
+    self._invocation_cost_manager.reset_tool_iterations_counter()
 
   @property
   def app_name(self) -> str:

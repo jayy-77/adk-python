@@ -550,6 +550,8 @@ class BaseLlmFlow(ABC):
 
     # Handles function calls.
     if model_response_event.get_function_calls():
+      # Increment tool iteration counter to prevent infinite loops (Issue #4179)
+      invocation_context.increment_tool_iteration_count()
 
       if is_feature_enabled(FeatureName.PROGRESSIVE_SSE_STREAMING):
         # In progressive SSE streaming mode stage 1, we skip partial FC events
@@ -567,6 +569,9 @@ class BaseLlmFlow(ABC):
       ) as agen:
         async for event in agen:
           yield event
+    else:
+      # No function calls means we got a final response, reset counter
+      invocation_context.reset_tool_iteration_count()
 
   async def _postprocess_live(
       self,
@@ -649,6 +654,9 @@ class BaseLlmFlow(ABC):
 
     # Handles function calls.
     if model_response_event.get_function_calls():
+      # Increment tool iteration counter to prevent infinite loops (Issue #4179)
+      invocation_context.increment_tool_iteration_count()
+      
       function_response_event = await functions.handle_function_calls_live(
           invocation_context, model_response_event, llm_request.tools_dict
       )
@@ -666,6 +674,9 @@ class BaseLlmFlow(ABC):
             )
         )
         yield final_event
+    else:
+      # No function calls means we got a final response, reset counter
+      invocation_context.reset_tool_iteration_count()
 
   async def _postprocess_run_processors_async(
       self, invocation_context: InvocationContext, llm_response: LlmResponse
