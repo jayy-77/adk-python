@@ -1648,12 +1648,43 @@ class AdkWebServer:
         await websocket.close(code=1002, reason="Session not found")
         return
 
-      # Replay existing session events to the reconnecting client
-      # This ensures that when a client reconnects, they see the full
-      # conversation history including user messages (Issue #3573)
-      if session.events:
+      # Determine if this is a live/audio session
+      # For live sessions, Gemini Live API provides transparent session resumption
+      # where the model automatically replays its last response. Replaying events
+      # manually would cause duplicates (Issue #3395).
+      # For text-only sessions, we need to replay all events (Issue #3573).
+      def is_live_session(events: list) -> bool:
+        """Check if session contains audio/video or transcription data."""
+        # Check last few events for live session indicators
+        for event in reversed(events[-5:] if len(events) > 5 else events):
+          # Check for transcription data (input/output)
+          if hasattr(event, 'input_transcription') and event.input_transcription:
+            return True
+          if hasattr(event, 'output_transcription') and event.output_transcription:
+            return True
+          # Check content for audio/video
+          if event.content:
+            for part in event.content.parts:
+              if part.inline_data and (
+                  part.inline_data.mime_type.startswith("audio/")
+                  or part.inline_data.mime_type.startswith("video/")
+              ):
+                return True
+              if part.file_data and (
+                  part.file_data.mime_type.startswith("audio/")
+                  or part.file_data.mime_type.startswith("video/")
+              ):
+                return True
+        return False
+
+      # Replay existing session events for text-only sessions
+      # Skip replay for live/audio sessions to avoid conflicts with
+      # Gemini Live API's built-in session resumption
+      should_replay = session.events and not is_live_session(session.events)
+
+      if should_replay:
         logger.info(
-            "Replaying %d existing events for session %s",
+            "Replaying %d existing events for text-only session %s",
             len(session.events),
             session_id,
         )
@@ -1670,6 +1701,12 @@ class AdkWebServer:
             )
             # Continue replaying other events even if one fails
             continue
+      elif session.events and not should_replay:
+        logger.info(
+            "Skipping event replay for live/audio session %s (relying on "
+            "Gemini Live API's transparent session resumption)",
+            session_id,
+        )
 
       live_request_queue = LiveRequestQueue()
 

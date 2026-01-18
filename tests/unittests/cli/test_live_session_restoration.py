@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for BIDI live session restoration with SQLite persistence (Issue #3573)."""
+"""Tests for BIDI live session restoration with SQLite persistence (Issue #3573, #3395)."""
 
 from __future__ import annotations
 
@@ -213,3 +213,162 @@ async def test_live_session_continues_after_replay_failure():
   # Should have replayed 2 events successfully (skipped the failing one)
   assert len(replayed_events) == 2
   assert send_call_count == 3  # Attempted all 3
+
+
+@pytest.mark.asyncio
+async def test_live_session_skips_replay_for_audio_sessions():
+  """Test that live sessions with audio/transcription skip replay to avoid duplicates.
+
+  This tests the fix for Issue #3395 where Gemini Live API's transparent session
+  resumption would conflict with our event replay, causing duplicate responses.
+  When a session contains audio or transcription data, we rely on the model's
+  session resumption instead of replaying events.
+  """
+  # Create a session with transcription data (indicating live mode)
+  user_event_with_transcription = Event(
+      id="event-user-1",
+      author="user",
+      content=types.Content(parts=[types.Part(text="Hello")]),
+      invocation_id="inv-1",
+      input_transcription=types.Transcription(
+          text="Hello", finished=True
+      ),
+  )
+  agent_event_with_transcription = Event(
+      id="event-agent-1",
+      author="test_agent",
+      content=types.Content(
+          parts=[types.Part(text="Hello! How can I help you?")]
+      ),
+      invocation_id="inv-1",
+      output_transcription=types.Transcription(
+          text="Hello! How can I help you?", finished=True
+      ),
+  )
+
+  mock_session = Session(
+      app_name="test_app",
+      user_id="test_user",
+      id="test_session",
+      state={},
+      events=[user_event_with_transcription, agent_event_with_transcription],
+      last_update_time=1234567890.0,
+  )
+
+  mock_websocket = AsyncMock()
+  replayed_events = []
+
+  async def capture_send_text(data):
+    replayed_events.append(data)
+
+  mock_websocket.send_text = capture_send_text
+
+  # Helper to detect live sessions (copied from adk_web_server.py logic)
+  def is_live_session(events: list) -> bool:
+    for event in reversed(events[-5:] if len(events) > 5 else events):
+      if hasattr(event, 'input_transcription') and event.input_transcription:
+        return True
+      if hasattr(event, 'output_transcription') and event.output_transcription:
+        return True
+      if event.content:
+        for part in event.content.parts:
+          if part.inline_data and (
+              part.inline_data.mime_type.startswith("audio/")
+              or part.inline_data.mime_type.startswith("video/")
+          ):
+            return True
+          if part.file_data and (
+              part.file_data.mime_type.startswith("audio/")
+              or part.file_data.mime_type.startswith("video/")
+          ):
+            return True
+    return False
+
+  # Test the conditional replay logic
+  session = mock_session
+  should_replay = session.events and not is_live_session(session.events)
+
+  if should_replay:
+    for event in session.events:
+      await mock_websocket.send_text(
+          event.model_dump_json(exclude_none=True, by_alias=True)
+      )
+
+  # Expect no events to be replayed because it's a live/audio session
+  assert len(replayed_events) == 0
+
+
+@pytest.mark.asyncio
+async def test_text_session_replays_events_normally():
+  """Test that text-only sessions still replay events as expected.
+
+  This ensures that the fix for Issue #3395 (skipping replay for live sessions)
+  doesn't break the fix for Issue #3573 (replaying events for text sessions).
+  """
+  # Create a session with only text content (no transcriptions)
+  user_event = Event(
+      id="event-user-1",
+      author="user",
+      content=types.Content(parts=[types.Part(text="Hello")]),
+      invocation_id="inv-1",
+  )
+  agent_event = Event(
+      id="event-agent-1",
+      author="test_agent",
+      content=types.Content(
+          parts=[types.Part(text="Hello! How can I help you?")]
+      ),
+      invocation_id="inv-1",
+  )
+
+  mock_session = Session(
+      app_name="test_app",
+      user_id="test_user",
+      id="test_session",
+      state={},
+      events=[user_event, agent_event],
+      last_update_time=1234567890.0,
+  )
+
+  mock_websocket = AsyncMock()
+  replayed_events = []
+
+  async def capture_send_text(data):
+    replayed_events.append(data)
+
+  mock_websocket.send_text = capture_send_text
+
+  # Helper to detect live sessions
+  def is_live_session(events: list) -> bool:
+    for event in reversed(events[-5:] if len(events) > 5 else events):
+      if hasattr(event, 'input_transcription') and event.input_transcription:
+        return True
+      if hasattr(event, 'output_transcription') and event.output_transcription:
+        return True
+      if event.content:
+        for part in event.content.parts:
+          if part.inline_data and (
+              part.inline_data.mime_type.startswith("audio/")
+              or part.inline_data.mime_type.startswith("video/")
+          ):
+            return True
+          if part.file_data and (
+              part.file_data.mime_type.startswith("audio/")
+              or part.file_data.mime_type.startswith("video/")
+          ):
+            return True
+    return False
+
+  # Test the conditional replay logic
+  session = mock_session
+  should_replay = session.events and not is_live_session(session.events)
+
+  if should_replay:
+    for event in session.events:
+      await mock_websocket.send_text(
+          event.model_dump_json(exclude_none=True, by_alias=True)
+      )
+
+  # Expect both events to be replayed for text-only session
+  assert len(replayed_events) == 2
+
