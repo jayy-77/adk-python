@@ -1648,6 +1648,29 @@ class AdkWebServer:
         await websocket.close(code=1002, reason="Session not found")
         return
 
+      # Replay existing session events to the reconnecting client
+      # This ensures that when a client reconnects, they see the full
+      # conversation history including user messages (Issue #3573)
+      if session.events:
+        logger.info(
+            "Replaying %d existing events for session %s",
+            len(session.events),
+            session_id,
+        )
+        for event in session.events:
+          try:
+            await websocket.send_text(
+                event.model_dump_json(exclude_none=True, by_alias=True)
+            )
+          except Exception as e:
+            logger.error(
+                "Failed to replay event %s during session restoration: %s",
+                event.id,
+                e,
+            )
+            # Continue replaying other events even if one fails
+            continue
+
       live_request_queue = LiveRequestQueue()
 
       async def forward_events():
