@@ -455,3 +455,47 @@ class TestGenerateInferencesFromRootAgent:
     mock_generate_inferences.assert_called_once()
     called_with_content = mock_generate_inferences.call_args.args[3]
     assert called_with_content.parts[0].text == "message 1"
+
+  @pytest.mark.asyncio
+  async def test_generates_inferences_with_custom_plugins(
+      self, mocker, mock_runner, mock_session_service
+  ):
+    """Tests that custom plugins are merged with built-in plugins."""
+    from google.adk.plugins.base_plugin import BasePlugin
+
+    mock_agent = mocker.MagicMock()
+    mock_user_sim = mocker.MagicMock(spec=UserSimulator)
+
+    # Mock user simulator will stop immediately
+    async def get_next_user_message_side_effect(*args, **kwargs):
+      return NextUserMessage(status=UserSimulatorStatus.STOP_SIGNAL_DETECTED)
+
+    mock_user_sim.get_next_user_message = mocker.AsyncMock(
+        side_effect=get_next_user_message_side_effect
+    )
+
+    # Create a custom plugin
+    custom_plugin = mocker.MagicMock(spec=BasePlugin)
+    custom_plugin.name = "custom_test_plugin"
+
+    await EvaluationGenerator._generate_inferences_from_root_agent(
+        root_agent=mock_agent,
+        user_simulator=mock_user_sim,
+        plugins=[custom_plugin],
+    )
+
+    # Verify Runner was created with merged plugins
+    # Built-in plugins: _RequestIntercepterPlugin, EnsureRetryOptionsPlugin
+    # Custom plugins: custom_test_plugin
+    runner_call_args = mock_runner.call_args
+    assert runner_call_args is not None
+    plugins_passed = runner_call_args[1]["plugins"]
+    assert len(plugins_passed) == 3, (
+        "Expected 3 plugins: 2 built-in + 1 custom"
+    )
+
+    # Verify built-in plugins are present
+    plugin_names = [p.name for p in plugins_passed]
+    assert "request_intercepter_plugin" in plugin_names
+    assert "ensure_retry_options" in plugin_names
+    assert "custom_test_plugin" in plugin_names

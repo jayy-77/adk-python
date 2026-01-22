@@ -19,6 +19,7 @@ import importlib
 from typing import Any
 from typing import AsyncGenerator
 from typing import Optional
+from typing import TYPE_CHECKING
 import uuid
 
 from google.genai.types import Content
@@ -49,6 +50,9 @@ from .simulation.user_simulator import Status as UserSimulatorStatus
 from .simulation.user_simulator import UserSimulator
 from .simulation.user_simulator_provider import UserSimulatorProvider
 
+if TYPE_CHECKING:
+  from ..plugins.base_plugin import BasePlugin
+
 _USER_AUTHOR = "user"
 _DEFAULT_AUTHOR = "agent"
 
@@ -72,6 +76,7 @@ class EvaluationGenerator:
       agent_module_path: str,
       repeat_num: int = 3,
       agent_name: str = None,
+      plugins: Optional[list[BasePlugin]] = None,
   ) -> list[EvalCaseResponses]:
     """Returns evaluation responses for the given dataset and agent.
 
@@ -82,6 +87,8 @@ class EvaluationGenerator:
         usually done to remove uncertainty that a single run may bring.
       agent_name: The name of the agent that should be evaluated. This is
         usually the sub-agent.
+      plugins: Optional list of additional plugins to use during evaluation.
+        These will be added to the built-in evaluation plugins.
     """
     results = []
 
@@ -95,6 +102,7 @@ class EvaluationGenerator:
             user_simulator,
             agent_name,
             eval_case.session_input,
+            plugins,
         )
         responses.append(response_invocations)
 
@@ -136,8 +144,17 @@ class EvaluationGenerator:
       user_simulator: UserSimulator,
       agent_name: Optional[str] = None,
       initial_session: Optional[SessionInput] = None,
+      plugins: Optional[list[BasePlugin]] = None,
   ) -> list[Invocation]:
-    """Process a query using the agent and evaluation dataset."""
+    """Process a query using the agent and evaluation dataset.
+
+    Args:
+      module_name: Path to the module containing the agent.
+      user_simulator: User simulator for the evaluation.
+      agent_name: Optional name of specific sub-agent to evaluate.
+      initial_session: Optional initial session state.
+      plugins: Optional list of additional plugins to use during evaluation.
+    """
     module_path = f"{module_name}"
     agent_module = importlib.import_module(module_path)
     root_agent = agent_module.agent.root_agent
@@ -154,6 +171,7 @@ class EvaluationGenerator:
         user_simulator=user_simulator,
         reset_func=reset_func,
         initial_session=initial_session,
+        plugins=plugins,
     )
 
   @staticmethod
@@ -194,8 +212,22 @@ class EvaluationGenerator:
       session_service: Optional[BaseSessionService] = None,
       artifact_service: Optional[BaseArtifactService] = None,
       memory_service: Optional[BaseMemoryService] = None,
+      plugins: Optional[list[BasePlugin]] = None,
   ) -> list[Invocation]:
-    """Scrapes the root agent in coordination with the user simulator."""
+    """Scrapes the root agent in coordination with the user simulator.
+
+    Args:
+      root_agent: The agent to evaluate.
+      user_simulator: User simulator for the evaluation.
+      reset_func: Optional reset function to call before evaluation.
+      initial_session: Optional initial session state.
+      session_id: Optional session ID to use.
+      session_service: Optional session service to use.
+      artifact_service: Optional artifact service to use.
+      memory_service: Optional memory service to use.
+      plugins: Optional list of additional plugins to use during evaluation.
+        These will be added to the built-in evaluation plugins.
+    """
 
     if not session_service:
       session_service = InMemorySessionService()
@@ -223,6 +255,7 @@ class EvaluationGenerator:
     if callable(reset_func):
       reset_func()
 
+    # Build plugin list: start with built-in eval plugins
     request_intercepter_plugin = _RequestIntercepterPlugin(
         name="request_intercepter_plugin"
     )
@@ -232,13 +265,19 @@ class EvaluationGenerator:
     ensure_retry_options_plugin = EnsureRetryOptionsPlugin(
         name="ensure_retry_options"
     )
+
+    # Merge built-in plugins with user-provided plugins
+    all_plugins = [request_intercepter_plugin, ensure_retry_options_plugin]
+    if plugins:
+      all_plugins.extend(plugins)
+
     async with Runner(
         app_name=app_name,
         agent=root_agent,
         artifact_service=artifact_service,
         session_service=session_service,
         memory_service=memory_service,
-        plugins=[request_intercepter_plugin, ensure_retry_options_plugin],
+        plugins=all_plugins,
     ) as runner:
       events = []
       while True:

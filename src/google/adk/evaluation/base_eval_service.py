@@ -17,8 +17,10 @@ from __future__ import annotations
 from abc import ABC
 from abc import abstractmethod
 from enum import Enum
+from typing import Any
 from typing import AsyncGenerator
 from typing import Optional
+from typing import TYPE_CHECKING
 
 from pydantic import alias_generators
 from pydantic import BaseModel
@@ -28,6 +30,9 @@ from pydantic import Field
 from .eval_case import Invocation
 from .eval_metrics import EvalMetric
 from .eval_result import EvalCaseResult
+
+if TYPE_CHECKING:
+  from ..plugins.base_plugin import BasePlugin
 
 
 class EvaluateConfig(BaseModel):
@@ -79,6 +84,28 @@ the quota.
 
 2) The tools used by the Agent could also have their SLA. Using a larger value
 could also overwhelm those tools.""",
+  )
+
+  plugins: list[Any] = Field(
+      default_factory=list,
+      description="""Additional plugins to use during evaluation inference.
+
+These plugins are added to the built-in evaluation plugins
+(_RequestIntercepterPlugin and EnsureRetryOptionsPlugin).
+
+Common use cases:
+- ReflectAndRetryToolPlugin: Automatically retry failed tool calls with
+  reflection
+- Custom logging or monitoring plugins
+- State management plugins
+
+Example:
+  from google.adk.plugins import ReflectAndRetryToolPlugin
+  
+  config = InferenceConfig(
+      plugins=[ReflectAndRetryToolPlugin(max_retries=3)]
+  )
+""",
   )
 
 

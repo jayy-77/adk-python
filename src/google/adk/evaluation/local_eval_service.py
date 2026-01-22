@@ -482,6 +482,9 @@ class LocalEvalService(BaseEvalService):
 
     try:
       with client_label_context(EVAL_CLIENT_LABEL):
+        # Extract plugins from inference config
+        plugins = inference_request.inference_config.plugins or []
+
         inferences = (
             await EvaluationGenerator._generate_inferences_from_root_agent(
                 root_agent=root_agent,
@@ -491,6 +494,7 @@ class LocalEvalService(BaseEvalService):
                 session_service=self._session_service,
                 artifact_service=self._artifact_service,
                 memory_service=self._memory_service,
+                plugins=plugins,
             )
         )
 

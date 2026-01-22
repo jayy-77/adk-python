@@ -257,6 +257,53 @@ async def test_perform_inference_with_case_ids(
 
 
 @pytest.mark.asyncio
+async def test_perform_inference_with_custom_plugins(
+    eval_service,
+    dummy_agent,
+    mock_eval_sets_manager,
+    mocker,
+):
+  """Tests that custom plugins are passed through to EvaluationGenerator."""
+  from google.adk.plugins.base_plugin import BasePlugin
+
+  eval_set = EvalSet(
+      eval_set_id="test_eval_set",
+      eval_cases=[
+          EvalCase(eval_id="case1", conversation=[], session_input=None),
+      ],
+  )
+  mock_eval_sets_manager.get_eval_set.return_value = eval_set
+
+  # Create a custom plugin
+  custom_plugin = mocker.MagicMock(spec=BasePlugin)
+  custom_plugin.name = "custom_test_plugin"
+
+  # Mock the EvaluationGenerator call to verify plugins are passed
+  mock_generate_inferences = mocker.patch(
+      "google.adk.evaluation.local_eval_service.EvaluationGenerator._generate_inferences_from_root_agent",
+      return_value=[],
+  )
+
+  inference_request = InferenceRequest(
+      app_name="test_app",
+      eval_set_id="test_eval_set",
+      inference_config=InferenceConfig(
+          parallelism=1, plugins=[custom_plugin]
+      ),
+  )
+
+  results = []
+  async for result in eval_service.perform_inference(inference_request):
+    results.append(result)
+
+  # Verify that plugins were passed to EvaluationGenerator
+  mock_generate_inferences.assert_called_once()
+  call_kwargs = mock_generate_inferences.call_args.kwargs
+  assert "plugins" in call_kwargs
+  assert call_kwargs["plugins"] == [custom_plugin]
+
+
+@pytest.mark.asyncio
 async def test_perform_inference_eval_set_not_found(
     eval_service,
     mock_eval_sets_manager,
