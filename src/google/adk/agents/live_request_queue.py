@@ -15,12 +15,13 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 from typing import Optional
 
 from google.genai import types
 from pydantic import BaseModel
 from pydantic import ConfigDict
-from pydantic import field_validator
+from pydantic import model_validator
 
 
 class LiveRequest(BaseModel):
@@ -56,6 +57,44 @@ class LiveRequest(BaseModel):
   close: bool = False
   """If set, close the queue. queue.shutdown() is only supported in Python 3.13+."""
 
+  state_delta: Optional[dict[str, Any]] = None
+  """If set, update the session state with the provided delta."""
+
+  @model_validator(mode="after")
+  def _validate_payload(self) -> "LiveRequest":
+    if self.close and any(
+        (
+            self.content,
+            self.blob,
+            self.activity_start,
+            self.activity_end,
+            self.state_delta,
+        )
+    ):
+      raise ValueError("close cannot be combined with other fields.")
+    if self.state_delta and any(
+        (
+            self.blob,
+            self.activity_start,
+            self.activity_end,
+        )
+    ):
+      raise ValueError(
+          "state_delta can only be combined with content."
+      )
+    if not any(
+        (
+            self.content,
+            self.blob,
+            self.activity_start,
+            self.activity_end,
+            self.close,
+            self.state_delta,
+        )
+    ):
+      raise ValueError("LiveRequest must set at least one field.")
+    return self
+
 
 class LiveRequestQueue:
   """Queue used to send LiveRequest in a live(bidirectional streaming) way."""
@@ -79,6 +118,10 @@ class LiveRequestQueue:
   def send_activity_end(self):
     """Sends an activity end signal to mark the end of user input."""
     self._queue.put_nowait(LiveRequest(activity_end=types.ActivityEnd()))
+
+  def send_state_delta(self, state_delta: dict[str, Any]):
+    """Sends a state delta update for the live session."""
+    self._queue.put_nowait(LiveRequest(state_delta=state_delta))
 
   def send(self, req: LiveRequest):
     self._queue.put_nowait(req)

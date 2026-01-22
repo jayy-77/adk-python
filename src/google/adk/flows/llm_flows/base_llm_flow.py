@@ -38,6 +38,9 @@ from ...agents.readonly_context import ReadonlyContext
 from ...agents.run_config import StreamingMode
 from ...agents.transcription_entry import TranscriptionEntry
 from ...events.event import Event
+from ...events.event_actions import EventActions
+from ...features import FeatureName
+from ...features import is_feature_enabled
 from ...models.base_llm_connection import BaseLlmConnection
 from ...models.llm_request import LlmRequest
 from ...models.llm_response import LlmResponse
@@ -240,6 +243,15 @@ class BaseLlmFlow(ABC):
     while True:
       live_request_queue = invocation_context.live_request_queue
       live_request = await live_request_queue.get()
+      if live_request.state_delta is not None:
+        state_delta_event = Event(
+            invocation_id=invocation_context.invocation_id,
+            author='user',
+            actions=EventActions(state_delta=live_request.state_delta),
+        )
+        await invocation_context.session_service.append_event(
+            session=invocation_context.session, event=state_delta_event
+        )
       # duplicate the live_request to all the active streams
       logger.debug(
           'Sending live request %s to active streams: %s',
