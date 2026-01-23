@@ -297,8 +297,10 @@ class BaseAgent(BaseModel):
       if ctx.end_invocation:
         return
 
-      if event := await self._handle_after_agent_callback(ctx):
-        yield event
+      # Skip after_agent_callback if the agent has handed off to another agent
+      if not ctx.agent_handoff_occurred:
+        if event := await self._handle_after_agent_callback(ctx):
+          yield event
 
   @final
   async def run_live(
@@ -327,8 +329,10 @@ class BaseAgent(BaseModel):
         async for event in agen:
           yield event
 
-      if event := await self._handle_after_agent_callback(ctx):
-        yield event
+      # Skip after_agent_callback if the agent has handed off to another agent
+      if not ctx.agent_handoff_occurred:
+        if event := await self._handle_after_agent_callback(ctx):
+          yield event
 
   async def _run_async_impl(
       self, ctx: InvocationContext

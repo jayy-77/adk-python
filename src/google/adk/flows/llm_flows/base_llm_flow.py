@@ -194,6 +194,8 @@ class BaseLlmFlow(ABC):
                   transfer_to_agent = event.actions.transfer_to_agent
                   if transfer_to_agent:
                     logger.debug('Transferring to agent: %s', transfer_to_agent)
+                    # Mark that handoff has occurred so after_agent_callback is skipped
+                    invocation_context.agent_handoff_occurred = True
                     agent_to_run = self._get_agent_to_run(
                         invocation_context, transfer_to_agent
                     )
@@ -714,6 +716,8 @@ class BaseLlmFlow(ABC):
         yield final_event
       transfer_to_agent = function_response_event.actions.transfer_to_agent
       if transfer_to_agent:
+        # Mark that handoff has occurred so after_agent_callback is skipped
+        invocation_context.agent_handoff_occurred = True
         agent_to_run = self._get_agent_to_run(
             invocation_context, transfer_to_agent
         )

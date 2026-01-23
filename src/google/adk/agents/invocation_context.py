@@ -176,6 +176,13 @@ class InvocationContext(BaseModel):
 
   Set to True in callbacks or tools to terminate this invocation."""
 
+  agent_handoff_occurred: bool = False
+  """Whether the current agent has handed off control to another agent.
+
+  Set to True when an agent transfers control to another agent via the
+  transfer_to_agent tool. Used to prevent after_agent_callback from running
+  on the transferring agent after handoff has occurred."""
+
   live_request_queue: Optional[LiveRequestQueue] = None
   """The queue to receive live requests."""
 
