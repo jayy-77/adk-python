@@ -22,6 +22,7 @@ from a2a.server.agent_execution import RequestContext
 from google.genai import types as genai_types
 from pydantic import BaseModel
 
+from ...agents.run_config import StreamingMode
 from ...runners import RunConfig
 from ..experimental import a2a_experimental
 from .part_converter import A2APartToGenAIPartConverter
@@ -44,6 +45,7 @@ A2ARequestToAgentRunRequestConverter = Callable[
     [
         RequestContext,
         A2APartToGenAIPartConverter,
+        Optional[StreamingMode],
     ],
     AgentRunRequest,
 ]
@@ -55,6 +57,8 @@ structured arguments expected by the ADK runner's `run_async` method.
 Args:
     request: The incoming request context from the A2A server.
     part_converter: A function to convert A2A content parts to GenAI parts.
+    streaming_mode: Optional streaming mode for the agent execution. If None,
+                    defaults to StreamingMode.NONE.
 
 Returns:
     An RunnerRequest object containing the keyword arguments for ADK runner's run_async method.
@@ -78,12 +82,15 @@ def _get_user_id(request: RequestContext) -> str:
 def convert_a2a_request_to_agent_run_request(
     request: RequestContext,
     part_converter: A2APartToGenAIPartConverter = convert_a2a_part_to_genai_part,
+    streaming_mode: Optional[StreamingMode] = None,
 ) -> AgentRunRequest:
   """Converts an A2A RequestContext to an AgentRunRequest model.
 
   Args:
     request: The incoming request context from the A2A server.
     part_converter: A function to convert A2A content parts to GenAI parts.
+    streaming_mode: Optional streaming mode for the agent execution. If None,
+                    defaults to StreamingMode.NONE.
 
   Returns:
     A AgentRunRequest object ready to be used as arguments for the ADK runner.
@@ -113,5 +120,8 @@ def convert_a2a_request_to_agent_run_request(
           role='user',
           parts=output_parts,
       ),
-      run_config=RunConfig(custom_metadata=custom_metadata),
+      run_config=RunConfig(
+          custom_metadata=custom_metadata,
+          streaming_mode=streaming_mode or StreamingMode.NONE,
+      ),
   )

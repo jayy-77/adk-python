@@ -25,12 +25,14 @@ from a2a.types import AgentCard
 from starlette.applications import Starlette
 
 from ...agents.base_agent import BaseAgent
+from ...agents.run_config import StreamingMode
 from ...artifacts.in_memory_artifact_service import InMemoryArtifactService
 from ...auth.credential_service.in_memory_credential_service import InMemoryCredentialService
 from ...memory.in_memory_memory_service import InMemoryMemoryService
 from ...runners import Runner
 from ...sessions.in_memory_session_service import InMemorySessionService
 from ..executor.a2a_agent_executor import A2aAgentExecutor
+from ..executor.a2a_agent_executor import A2aAgentExecutorConfig
 from ..experimental import a2a_experimental
 from .agent_card_builder import AgentCardBuilder
 
@@ -79,6 +81,7 @@ def to_a2a(
     protocol: str = "http",
     agent_card: Optional[Union[AgentCard, str]] = None,
     runner: Optional[Runner] = None,
+    streaming_mode: Optional[StreamingMode] = None,
 ) -> Starlette:
   """Convert an ADK agent to a A2A Starlette application.
 
@@ -92,6 +95,10 @@ def to_a2a(
                   agent.
       runner: Optional pre-built Runner object. If not provided, a default
               runner will be created using in-memory services.
+      streaming_mode: Optional streaming mode for agent execution. If None,
+                      defaults to StreamingMode.NONE. Set to StreamingMode.SSE
+                      to enable Server-Sent Events streaming for real-time
+                      responses.
 
   Returns:
       A Starlette application that can be run with uvicorn
@@ -103,6 +110,9 @@ def to_a2a(
 
       # Or with custom agent card:
       app = to_a2a(agent, agent_card=my_custom_agent_card)
+
+      # With SSE streaming enabled:
+      app = to_a2a(agent, streaming_mode=StreamingMode.SSE)
   """
   # Set up ADK logging to ensure logs are visible when using uvicorn directly
   adk_logger = logging.getLogger("google_adk")
@@ -123,8 +133,14 @@ def to_a2a(
   # Create A2A components
   task_store = InMemoryTaskStore()
 
+  # Create executor config with streaming mode
+  executor_config = A2aAgentExecutorConfig(
+      streaming_mode=streaming_mode,
+  )
+
   agent_executor = A2aAgentExecutor(
       runner=runner or create_runner,
+      config=executor_config,
   )
 
   request_handler = DefaultRequestHandler(

@@ -38,6 +38,7 @@ from google.adk.runners import Runner
 from pydantic import BaseModel
 from typing_extensions import override
 
+from ...agents.run_config import StreamingMode
 from ...utils.context_utils import Aclosing
 from ..converters.event_converter import AdkEventToA2AEventsConverter
 from ..converters.event_converter import convert_event_to_a2a_events
@@ -69,6 +70,8 @@ class A2aAgentExecutorConfig(BaseModel):
       convert_a2a_request_to_agent_run_request
   )
   event_converter: AdkEventToA2AEventsConverter = convert_event_to_a2a_events
+  streaming_mode: Optional[StreamingMode] = None
+  """Optional streaming mode for agent execution. If None, defaults to StreamingMode.NONE."""
 
 
 @a2a_experimental
@@ -190,6 +193,7 @@ class A2aAgentExecutor(AgentExecutor):
     run_request = self._config.request_converter(
         context,
         self._config.a2a_part_converter,
+        self._config.streaming_mode,
     )
 
     # ensure the session exists
