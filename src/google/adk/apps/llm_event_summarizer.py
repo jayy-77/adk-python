@@ -81,18 +81,31 @@ class LlmEventSummarizer(BaseEventsSummarizer):
     return '\\n'.join(formatted_history)
 
   async def maybe_summarize_events(
-      self, *, events: list[Event]
+      self, *, events: list[Event], config: EventsCompactionConfig
   ) -> Optional[Event]:
     """Compacts given events and returns the compacted content.
 
     Args:
       events: A list of events to compact.
+      config: The configuration for event compaction.
 
     Returns:
       The new compacted event, or None if no compaction is needed.
     """
     if not events:
       return None
+
+    # Placeholder for token counting logic
+    def count_tokens(events: list[Event]) -> int:
+        return sum(len(event.content.parts) for event in events if event.content)
+
+    token_count = count_tokens(events)
+
+    if config.token_threshold and token_count <= config.token_threshold:
+        return None
+
+    if config.retain_recent_events:
+        events = events[-config.retain_recent_events:]
 
     conversation_history = self._format_events_for_prompt(events)
     prompt = self._prompt_template.format(

@@ -37,6 +37,15 @@ async def test_dependent_tool_calls():
 
 
 @pytest.mark.asyncio
+async def test_context_compaction_with_thresholds():
+  """Test context compaction using token threshold and retaining recent events."""
+  await AgentEvaluator.evaluate(
+      agent_module="tests.integration.fixture.compaction_evaluation_agent",
+      eval_dataset_file_path_or_dir="tests/integration/fixture/compaction_evaluation_agent/test_files/compaction_with_thresholds.test.json",
+      num_runs=4,
+  )
+
+@pytest.mark.asyncio
 async def test_memorizing_past_events():
   """Test memorizing past events."""
   await AgentEvaluator.evaluate(

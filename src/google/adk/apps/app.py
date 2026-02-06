@@ -80,6 +80,12 @@ class EventsCompactionConfig(BaseModel):
   end of the last compacted range. This creates an overlap between consecutive
   compacted summaries, maintaining context."""
 
+  token_threshold: Optional[int] = None
+  """Token count that triggers compaction when exceeded."""
+
+  retain_recent_events: Optional[int] = None
+  """Number of the most recent events to retain during compaction."""
+
 
 class App(BaseModel):
   """Represents an LLM-backed agentic application.

@@ -192,7 +192,8 @@ async def _run_compaction_for_sliding_window(
 
   compaction_event = (
       await app.events_compaction_config.summarizer.maybe_summarize_events(
-          events=events_to_compact
+          events=events_to_compact,
+          config=app.events_compaction_config
       )
   )
   if compaction_event:
