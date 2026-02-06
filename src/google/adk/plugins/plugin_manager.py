@@ -52,6 +52,7 @@ PluginCallbackName = Literal[
     "after_model_callback",
     "on_tool_error_callback",
     "on_model_error_callback",
+    "on_state_change_callback",
 ]
 
 logger = logging.getLogger("google_adk." + __name__)
@@ -255,6 +256,27 @@ class PluginManager:
         tool_args=tool_args,
         tool_context=tool_context,
         error=error,
+    )
+
+  async def run_on_state_change_callback(
+      self,
+      *,
+      invocation_context: InvocationContext,
+      state_delta: dict[str, Any],
+  ) -> None:
+    """Runs the `on_state_change_callback` for all plugins.
+
+    Args:
+      invocation_context: The invocation context.
+      state_delta: A copy of the state changes.
+
+    Returns:
+      None. This callback is observational only.
+    """
+    await self._run_callbacks(
+        "on_state_change_callback",
+        invocation_context=invocation_context,
+        state_delta=state_delta,
     )
 
   async def _run_callbacks(

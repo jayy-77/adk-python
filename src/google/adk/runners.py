@@ -840,8 +840,20 @@ class Runner:
                 modified_event, invocation_context.run_config
             )
             yield modified_event
+            # Detect state_delta changes after yielding the modified event
+            if modified_event.actions.state_delta:
+              await plugin_manager.run_on_state_change_callback(
+                  invocation_context=invocation_context,
+                  state_delta=modified_event.actions.state_delta.copy(),
+              )
           else:
             yield event
+            # Detect state_delta changes after yielding the original event
+            if event.actions.state_delta:
+              await plugin_manager.run_on_state_change_callback(
+                  invocation_context=invocation_context,
+                  state_delta=event.actions.state_delta.copy(),
+              )
 
     # Step 4: Run the after_run callbacks to perform global cleanup tasks or
     # finalizing logs and metrics data.

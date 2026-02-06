@@ -370,3 +370,24 @@ class BasePlugin(ABC):
       allows the original error to be raised.
     """
     pass
+
+  async def on_state_change_callback(
+      self,
+      *,
+      invocation_context: InvocationContext,
+      state_delta: dict[str, Any],
+  ) -> None:
+    """Callback executed when session state changes via event.actions.state_delta.
+
+    This callback is invoked whenever an event with a non-empty state_delta
+    is yielded from the runner, allowing plugins to observe and log state
+    changes. The callback is observational only - the return value is ignored.
+
+    Args:
+      invocation_context: The context for the entire invocation.
+      state_delta: A copy of the state changes. Plugins should not mutate this.
+
+    Returns:
+      None
+    """
+    pass
