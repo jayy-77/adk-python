@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from .base_agent import BaseAgent
+from .if_agent import IfAgent
 from .invocation_context import InvocationContext
 from .live_request_queue import LiveRequest
 from .live_request_queue import LiveRequestQueue
@@ -27,6 +28,7 @@ from .sequential_agent import SequentialAgent
 __all__ = [
     'Agent',
     'BaseAgent',
+    'IfAgent',
     'LlmAgent',
     'LoopAgent',
     'McpInstructionProvider',

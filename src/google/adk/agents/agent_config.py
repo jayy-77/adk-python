@@ -25,12 +25,14 @@ from pydantic import Tag
 
 from ..utils.feature_decorator import experimental
 from .base_agent_config import BaseAgentConfig
+from .if_agent_config import IfAgentConfig
 from .llm_agent_config import LlmAgentConfig
 from .loop_agent_config import LoopAgentConfig
 from .parallel_agent_config import ParallelAgentConfig
 from .sequential_agent_config import SequentialAgentConfig
 
 _ADK_AGENT_CLASSES: set[str] = {
+    "IfAgent",
     "LlmAgent",
     "LoopAgent",
     "ParallelAgent",
@@ -56,6 +58,7 @@ def agent_config_discriminator(v: Any) -> str:
 # A discriminated union of all possible agent configurations.
 ConfigsUnion = Annotated[
     Union[
+        Annotated[IfAgentConfig, Tag("IfAgent")],
         Annotated[LlmAgentConfig, Tag("LlmAgent")],
         Annotated[LoopAgentConfig, Tag("LoopAgent")],
         Annotated[ParallelAgentConfig, Tag("ParallelAgent")],
