@@ -83,15 +83,30 @@ def convert_part_to_interaction_content(part: types.Part) -> Optional[dict]:
       result = json.dumps(result)
     elif not isinstance(result, str):
       result = str(result)
+    
+    # Backward compatibility: Skip function_result with empty call_id
+    # Old sessions created before Interactions API migration may have
+    # function_response parts without an id field, which causes errors
+    # in the Interactions API
+    call_id = part.function_response.id or ''
+    if not call_id:
+      logger.warning(
+          'Skipping function_response without call_id (legacy session data): '
+          'name=%s. This function result will not be sent to the Interactions '
+          'API.',
+          part.function_response.name,
+      )
+      return None
+    
     logger.debug(
         'Converting function_response: name=%s, call_id=%s',
         part.function_response.name,
-        part.function_response.id,
+        call_id,
     )
     return {
         'type': 'function_result',
         'name': part.function_response.name or '',
-        'call_id': part.function_response.id or '',
+        'call_id': call_id,
         'result': result,
     }
   elif part.inline_data is not None:
@@ -914,6 +929,62 @@ def _get_latest_user_contents(
   return latest_user_contents
 
 
+def _patch_legacy_function_responses(
+    contents: list[types.Content],
+) -> list[types.Content]:
+  """Patch legacy session data to ensure compatibility with Interactions API.
+
+  Old sessions created before the Interactions API migration may have
+  function_response parts without call_id. This function removes such
+  parts to prevent API errors.
+
+  Args:
+    contents: The list of Content objects to patch.
+
+  Returns:
+    A new list of Content objects with legacy function responses filtered out.
+  """
+  patched_contents = []
+  
+  for content in contents:
+    if not content.parts:
+      patched_contents.append(content)
+      continue
+    
+    # Filter out function_response parts without call_id
+    patched_parts = []
+    skipped_count = 0
+    
+    for part in content.parts:
+      if part.function_response is not None:
+        if not part.function_response.id:
+          # Skip legacy function_response without call_id
+          skipped_count += 1
+          logger.debug(
+              'Filtering out legacy function_response without call_id: name=%s',
+              part.function_response.name,
+          )
+          continue
+      patched_parts.append(part)
+    
+    # Only include content if it has parts after filtering
+    if patched_parts:
+      patched_content = types.Content(
+          role=content.role,
+          parts=patched_parts,
+      )
+      patched_contents.append(patched_content)
+    elif skipped_count > 0:
+      logger.info(
+          'Removed legacy %s content with %d function_response(s) without '
+          'call_id for Interactions API compatibility',
+          content.role,
+          skipped_count,
+      )
+  
+  return patched_contents
+
+
 async def generate_content_via_interactions(
     api_client: Client,
     llm_request: LlmRequest,
@@ -938,9 +1009,15 @@ async def generate_content_via_interactions(
   """
   from .llm_response import LlmResponse
 
+  # Patch legacy session data: remove function_response parts without call_id
+  # to ensure backward compatibility with sessions created before Interactions
+  # API migration
+  contents = llm_request.contents
+  if contents:
+    contents = _patch_legacy_function_responses(contents)
+
   # When previous_interaction_id is set, only send the latest continuous
   # user messages (the current turn) instead of full conversation history
-  contents = llm_request.contents
   if llm_request.previous_interaction_id and contents:
     contents = _get_latest_user_contents(contents)
 

@@ -278,6 +278,11 @@ class Gemini(BaseLlm):
 
     Note: Context caching is not used with the Interactions API since it
     maintains conversation state via previous_interaction_id.
+    
+    Backward Compatibility: Old sessions created before Interactions API
+    migration may contain function_response parts without call_id. These
+    are automatically filtered out in interactions_utils.py to prevent
+    API errors. See _patch_legacy_function_responses() for details.
 
     Args:
       llm_request: The LLM request to send.
@@ -287,6 +292,22 @@ class Gemini(BaseLlm):
       LlmResponse objects converted from interaction responses.
     """
     from .interactions_utils import generate_content_via_interactions
+    
+    # Log backward compatibility check for debugging
+    if llm_request.contents:
+      legacy_count = 0
+      for content in llm_request.contents:
+        if content.parts:
+          for part in content.parts:
+            if part.function_response and not part.function_response.id:
+              legacy_count += 1
+      
+      if legacy_count > 0:
+        logger.info(
+            'Detected %d legacy function_response(s) without call_id. '
+            'These will be filtered for Interactions API compatibility.',
+            legacy_count,
+        )
 
     async for llm_response in generate_content_via_interactions(
         api_client=self.api_client,

@@ -68,9 +68,37 @@ class InteractionsRequestProcessor(BaseLlmRequestProcessor):
           'Found previous_interaction_id for interactions API: %s',
           previous_interaction_id,
       )
+    
+    # Patch legacy session data: warn about function_response without call_id
+    # This helps with backward compatibility for old sessions
+    self._check_for_legacy_function_responses(llm_request)
+    
     # Don't yield any events - this is just a preprocessing step
     return
     yield  # Required for AsyncGenerator
+
+  def _check_for_legacy_function_responses(
+      self, llm_request: 'LlmRequest'
+  ) -> None:
+    """Check for and log legacy function_response parts without call_id.
+    
+    Args:
+        llm_request: The LLM request to check
+    """
+    if not llm_request.contents:
+      return
+    
+    for content in llm_request.contents:
+      if not content.parts:
+        continue
+      for part in content.parts:
+        if part.function_response and not part.function_response.id:
+          logger.warning(
+              'Detected legacy function_response without call_id in session. '
+              'This will be filtered out during Interactions API conversion. '
+              'name=%s',
+              part.function_response.name,
+          )
 
   def _find_previous_interaction_id(
       self, invocation_context: 'InvocationContext'
