@@ -17,6 +17,7 @@ from __future__ import annotations
 from abc import ABC
 import inspect
 import logging
+import types as typing_types
 from typing import Any
 from typing import Callable
 from typing import get_args
@@ -168,7 +169,7 @@ class BaseTool(ABC):
         value = config_dict[param_name]
 
         # Get the actual type T of the parameter if it's Optional[T]
-        if get_origin(param_type) is Union:
+        if get_origin(param_type) in (Union, typing_types.UnionType):
           # This is Optional[T] which is Union[T, None]
           args = get_args(param_type)
           if len(args) == 2 and type(None) in args:

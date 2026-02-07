@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import types as typing_types
 from typing import Any
 from typing import Callable
 from typing import get_args
@@ -122,7 +123,7 @@ class FunctionTool(BaseTool):
         target_type = param.annotation
 
         # Handle Optional[PydanticModel] types
-        if get_origin(param.annotation) is Union:
+        if get_origin(param.annotation) in (Union, typing_types.UnionType):
           union_args = get_args(param.annotation)
           # Find the non-None type in Optional[T] (which is Union[T, None])
           non_none_types = [arg for arg in union_args if arg is not type(None)]

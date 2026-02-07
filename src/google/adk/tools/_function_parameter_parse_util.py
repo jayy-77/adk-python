@@ -247,7 +247,7 @@ def _parse_schema_from_parameter(
     _raise_if_schema_unsupported(variant, schema)
     return schema
   if (
-      get_origin(param.annotation) is Union
+      get_origin(param.annotation) in (Union, typing_types.UnionType)
       # only parse simple UnionType, example int | str | float | bool
       # complex types.UnionType will be invoked in raise branch
       and all(
@@ -330,7 +330,7 @@ def _parse_schema_from_parameter(
         schema.default = param.default
       _raise_if_schema_unsupported(variant, schema)
       return schema
-    if origin is Union:
+    if origin in (Union, typing_types.UnionType):
       schema.any_of = []
       schema.type = types.Type.OBJECT
       unique_types = set()
